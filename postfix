@@ -1,0 +1,7 @@
+#!/bin/bash
+echo "$POSTFIX_CONFIG" >/etc/postfix/local.conf
+eval "$POSTFIX_INIT"
+
+
+# start postfix
+#/usr/sbin/postfix -c /etc/postfix start

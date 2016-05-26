@@ -1,0 +1,86 @@
+dovecot:
+  image: jmcarbo/docker-dovecot
+  environment:
+    DOVECOT_POP3_HOSTNAME: pop3.jmca.io
+    DOVECOT_IMAP_HOSTNAME: imap.jmca.io
+    DOVECOT_INIT: |-
+      mkdir -p /data/logs
+      chown -R vmail:vmail /data/logs
+      mkdir -p /data/mail
+      chown -R vmail:vmail /data/mail
+      mkdir -p /data/home
+      chown -R vmail:vmail /data/home
+      mkdir -p /data/auth
+      chown -R vmail:vmail /data/auth
+      mkdir -p /data/mail/pepe.com/user
+      mkdir -p /data/home/pepe.com/user
+      mkdir -p /data/auth/pepe.com
+      echo "user:password" >/data/auth/pepe.com/passwd
+      chown -R vmail:vmail /data
+    DOVECOT_CONFIG: |-
+      disable_plaintext_auth = no
+      log_path=/data/logs/dovecot.log
+      auth_debug_passwords=yes
+      protocols=imap pop3 lmtp
+      mail_location=sdbox:/data/mail/%d/%n
+      mail_home=/data/home/%d/%n
+      userdb {
+        driver = static
+        args = uid=vmail gid=vmail home=/data/home/%d/%n
+      }
+      passdb {
+        driver = passwd-file
+        args = username_format=%n scheme=plain /data/auth/%d/passwd
+      }
+      lmtp_save_to_detail_mailbox = yes
+      recipient_delimiter = +
+      protocol lmtp {
+        postmaster_address = postmaster@pepe.com   # required
+      }
+      service lmtp {
+        #user=vmail
+        inet_listener lmtp {
+          #address = 192.168.0.24 127.0.0.1 ::1
+          port = 24
+        }
+      }
+  command: /start
+  ports:
+    - 110:110
+    - 143:143
+    - 993:993
+    - 995:995
+    - 24:24
+  volumes:
+    - $PWD/data:/data
+postfix:
+  image: jmcarbo/docker-postfix
+  environment:
+    POSTFIX_INIT: |-
+      echo "Starting config"
+      mkdir -p /data/postfix
+      mkdir -p /data/postfixqueue
+      #postconf -e 'inet_interfaces = all'
+      #postconf -e 'mydomain = pepe2.com'
+      #postconf -e 'mydestination = pepe2.com'
+      #postconf -e 'mail_transport = lmtp:inet:dovecot:24'
+      postconf -e 'virtual_transport = lmtp:dovecot:24'
+      postconf -e 'smtpd_recipient_restrictions=permit_mynetworks,reject_unverified_recipient'
+      postconf -e 'virtual_mailbox_domains = pepe.com'
+      #postconf -e 'virtual_mailbox_maps = hash:/data/postfix/vmailbox'
+      postconf -e 'virtual_alias_maps = hash:/data/postfix/virtual'
+      postconf -e 'lmtp_host_lookup = native'
+      #postconf -e 'queue_directory = /data/postfixqueue'
+      echo "" >/data/postfix/vmailbox
+      echo "" >/data/postfix/virtual
+      postmap /data/postfix/vmailbox
+      postmap /data/postfix/virtual
+    POSTFIX_CONFIG: |-
+  #command: /start
+  ports:
+    - "2525:25"
+  volumes:
+    - $PWD/data:/data
+  links:
+    - dovecot:dovecot
+  privileged: true
